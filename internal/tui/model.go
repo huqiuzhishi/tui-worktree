@@ -35,7 +35,7 @@ type Config struct {
 	Error             error
 	LoadDiff          func(context.Context, string, gitview.FileChange) string
 	DeleteWorktree    func(context.Context, gitview.Worktree) error
-	Reload            func(context.Context, string) Snapshot
+	Reload            func(context.Context, string, bool) Snapshot
 	SaveTheme         func(string) error
 	SaveTransparent   func(bool) error
 	FindForgeCLI      func() (string, bool)
@@ -82,6 +82,7 @@ type Model struct {
 	revision          int
 	refreshGeneration int
 	refreshInFlight   bool
+	mergeBase         bool
 	width             int
 	height            int
 	err               error
@@ -99,7 +100,7 @@ type Model struct {
 	worktreeList
 	loadDiff          func(context.Context, string, gitview.FileChange) string
 	deleteWorktree    func(context.Context, gitview.Worktree) error
-	reload            func(context.Context, string) Snapshot
+	reload            func(context.Context, string, bool) Snapshot
 	saveTheme         func(string) error
 	saveTransparent   func(bool) error
 	findForgeCLI      func() (string, bool)
@@ -238,6 +239,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.path != "" {
 			key := msg.worktree + "\x00" + msg.path
+			if msg.base != "" {
+				key = msg.worktree + "\x00" + msg.base + "\x00" + msg.path
+			}
 			m.diffs[key] = msg.diff
 			if selected := m.selectedFileValue(); selected.Path == msg.path && m.selectedWorktreeValue().Path == msg.worktree {
 				m.refreshDiff()
@@ -340,6 +344,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.toggleDiffWrap()
 	case "n":
 		return m, m.toggleLineNumbers()
+	case "b":
+		return m, m.toggleDiffBase()
 	case "/":
 		m.mode = modeFileFilter
 		m.focusedPane = paneFiles
@@ -508,7 +514,12 @@ func (m Model) footerText() string {
 	if len(m.overlapTargetsFor(m.selectedFileValue())) > 0 {
 		hints = append(hints, components.FooterHint{Icon: components.IconWarning, Key: "o", Label: "overlaps"})
 	}
+	baseLabel := "HEAD"
+	if m.mergeBase {
+		baseLabel = "merge-base"
+	}
 	hints = append(hints,
+		components.FooterHint{Icon: components.IconFile, Key: "b", Label: baseLabel},
 		components.FooterHint{Icon: components.IconTheme, Key: "t", Label: "themes"},
 		components.FooterHint{Icon: components.IconQuit, Key: "q", Label: "quit"},
 	)
@@ -618,6 +629,21 @@ func (m *Model) toggleLineNumbers() tea.Cmd {
 		return m.toast.Info("line numbers on")
 	}
 	return m.toast.Info("line numbers off")
+}
+
+func (m *Model) toggleDiffBase() tea.Cmd {
+	if m.reload == nil {
+		return m.toast.Error("diff reload is not configured")
+	}
+	m.mergeBase = !m.mergeBase
+	m.revision++
+	m.diffs = map[string]string{}
+	m.refreshDiff()
+	label := "HEAD"
+	if m.mergeBase {
+		label = "merge base"
+	}
+	return tea.Batch(m.toast.Info("diff base: "+label), m.startReloadCmd(m.selectedWorktreeValue().Path))
 }
 
 func (m *Model) openSelectedFileInEditor() tea.Cmd {
@@ -1318,7 +1344,7 @@ func (m Model) reloadCmd(generation int, selectedWorktreePath string) tea.Cmd {
 		}
 	}
 	return func() tea.Msg {
-		return reloadMsg{generation: generation, snapshot: reload(m.context, selectedWorktreePath)}
+		return reloadMsg{generation: generation, snapshot: reload(m.context, selectedWorktreePath, m.mergeBase)}
 	}
 }
 
@@ -1370,6 +1396,7 @@ func (m Model) selectedDiffCmdWithYOffset(diffYOffset int, force bool) tea.Cmd {
 			revision:    m.revision,
 			worktree:    worktreePath,
 			path:        selected.Path,
+			base:        selected.Base,
 			diff:        m.loadDiff(m.context, worktreePath, selected),
 			diffYOffset: diffYOffset,
 		}
@@ -1450,6 +1477,7 @@ func (m Model) snapshotUnchanged(snapshot Snapshot) bool {
 func selectedDiffChanged(previous, next gitview.FileChange) bool {
 	if previous.Status != next.Status ||
 		previous.OldPath != next.OldPath ||
+		previous.Base != next.Base ||
 		previous.Additions != next.Additions ||
 		previous.Deletions != next.Deletions ||
 		previous.Binary != next.Binary {
@@ -1668,7 +1696,10 @@ func (m Model) worktreePaneHeight(contentHeight int) int {
 }
 
 func (m Model) diffKey(change gitview.FileChange) string {
-	return m.selectedWorktreeValue().Path + "\x00" + change.Path
+	if change.Base == "" {
+		return m.selectedWorktreeValue().Path + "\x00" + change.Path
+	}
+	return m.selectedWorktreeValue().Path + "\x00" + change.Base + "\x00" + change.Path
 }
 
 func listStyleWithBackground(style lipgloss.Style, background color.Color) lipgloss.Style {

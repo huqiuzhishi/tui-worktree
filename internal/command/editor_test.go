@@ -34,6 +34,9 @@ func TestOpenEditorCommandUsesEditorEnvWhenEditorIsEmpty(t *testing.T) {
 	if cmd.Dir != "/repo" {
 		t.Fatalf("cmd.Dir = %q, want /repo", cmd.Dir)
 	}
+	if got := cmd.Args[len(cmd.Args)-1]; got != "/repo/main.go" {
+		t.Fatalf("editor target = %q, want /repo/main.go", got)
+	}
 	if !slices.Contains(cmd.Env, "EDITOR=code --wait") {
 		t.Fatalf("cmd.Env should preserve EDITOR from environment: %#v", cmd.Env)
 	}

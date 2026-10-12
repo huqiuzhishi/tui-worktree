@@ -64,6 +64,55 @@ func (r Repository) Changes(ctx context.Context) ([]FileChange, error) {
 	return addContentFingerprints(dir, ApplyLineStats(changes, stats)), nil
 }
 
+func (r Repository) ChangesFromMergeBase(ctx context.Context) ([]FileChange, error) {
+	runner := r.runner()
+	dir, err := r.root(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !r.hasHead(ctx, dir) {
+		return r.Changes(ctx)
+	}
+	base, err := r.mergeBase(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+
+	nameStatusOut, err := runner.Run(ctx, dir, "git", "diff", "--name-status", "-z", "--find-renames", base, "--")
+	if err != nil {
+		return nil, fmt.Errorf("git diff --name-status: %w", err)
+	}
+	changes, err := ParseNameStatus(nameStatusOut)
+	if err != nil {
+		return nil, err
+	}
+	statusOut, err := runner.Run(ctx, dir, "git", "status", "--porcelain=v1", "-z")
+	if err != nil {
+		return nil, fmt.Errorf("git status: %w", err)
+	}
+	statusChanges, err := ParsePorcelainStatus(statusOut)
+	if err != nil {
+		return nil, err
+	}
+	for _, change := range statusChanges {
+		if change.Status == Untracked {
+			changes = append(changes, change)
+		}
+	}
+	numstatOut, err := runner.Run(ctx, dir, "git", "diff", "--numstat", "-z", base, "--")
+	if err != nil {
+		return nil, fmt.Errorf("git diff --numstat: %w", err)
+	}
+	stats, err := ParseNumstat(numstatOut)
+	if err != nil {
+		return nil, err
+	}
+	for i := range changes {
+		changes[i].Base = base
+	}
+	return addContentFingerprints(dir, ApplyLineStats(changes, stats)), nil
+}
+
 func (r Repository) Diff(ctx context.Context, change FileChange) (string, error) {
 	dir, err := r.root(ctx)
 	if err != nil {
@@ -73,7 +122,9 @@ func (r Repository) Diff(ctx context.Context, change FileChange) (string, error)
 		return untrackedDiff(dir, change.Path)
 	}
 	args := []string{"diff", "--no-ext-diff", "--find-renames", "--color=never"}
-	if r.hasHead(ctx, dir) {
+	if change.Base != "" {
+		args = append(args, change.Base)
+	} else if r.hasHead(ctx, dir) {
 		args = append(args, "HEAD")
 	} else {
 		args = append(args, "--cached")
@@ -243,6 +294,38 @@ func (r Repository) DeleteWorktree(ctx context.Context, worktree Worktree) error
 		return fmt.Errorf("git branch -D %s: %w", worktree.Branch, err)
 	}
 	return nil
+}
+
+func (r Repository) mergeBase(ctx context.Context, root string) (string, error) {
+	ref := ""
+	out, err := r.runner().Run(ctx, root, "git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+	if err == nil {
+		ref = trimTrailingNewline(out)
+		local := shortRemoteBranch(ref)
+		if _, err := r.runner().Run(ctx, root, "git", "rev-parse", "--verify", local); err == nil {
+			ref = local
+		}
+	}
+	if ref == "" {
+		for _, candidate := range []string{"main", "master", "trunk"} {
+			if _, err := r.runner().Run(ctx, root, "git", "rev-parse", "--verify", candidate); err == nil {
+				ref = candidate
+				break
+			}
+		}
+	}
+	if ref == "" {
+		return "", fmt.Errorf("merge base: default branch not found (tried origin/HEAD, main, master, trunk)")
+	}
+	out, err = r.runner().Run(ctx, root, "git", "merge-base", "HEAD", ref)
+	if err != nil {
+		return "", fmt.Errorf("git merge-base HEAD %s: %w", ref, err)
+	}
+	base := trimTrailingNewline(out)
+	if base == "" {
+		return "", fmt.Errorf("git merge-base HEAD %s: empty result", ref)
+	}
+	return base, nil
 }
 
 func (r Repository) defaultBranch(ctx context.Context, root string, worktrees []Worktree) string {

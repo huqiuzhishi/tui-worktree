@@ -31,6 +31,7 @@ type diffLoadedMsg struct {
 	revision    int
 	worktree    string
 	path        string
+	base        string
 	diff        string
 	diffYOffset int
 }

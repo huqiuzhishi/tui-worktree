@@ -13,6 +13,7 @@ const (
 type FileChange struct {
 	Path        string
 	OldPath     string
+	Base        string
 	Status      ChangeStatus
 	Additions   int
 	Deletions   int

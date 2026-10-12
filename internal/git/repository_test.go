@@ -96,6 +96,50 @@ func TestRepositoryDiffRequestsUncoloredOutput(t *testing.T) {
 	}
 }
 
+func TestRepositoryChangesFromMergeBase(t *testing.T) {
+	runner := &fakeRunner{outputs: map[string]string{
+		"git rev-parse --show-toplevel":                             ".",
+		"git rev-parse --verify HEAD":                               "feature-head\n",
+		"git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+		"git rev-parse --verify main":                               "main-head\n",
+		"git merge-base HEAD main":                                  "base123\n",
+		"git diff --name-status -z --find-renames base123 --":       "M\x00README.md\x00R100\x00old.go\x00new.go\x00",
+		"git status --porcelain=v1 -z":                              " M README.md\x00?? scratch.txt\x00",
+		"git diff --numstat -z base123 --":                          "4\t2\tREADME.md\x001\t0\t\x00old.go\x00new.go\x00",
+	}}
+	repo := Repository{Runner: runner}
+
+	got, err := repo.ChangesFromMergeBase(context.Background())
+	if err != nil {
+		t.Fatalf("ChangesFromMergeBase() error = %v", err)
+	}
+	want := []FileChange{
+		{Path: "README.md", Base: "base123", Status: Modified, Additions: 4, Deletions: 2},
+		{Path: "new.go", OldPath: "old.go", Base: "base123", Status: Renamed, Additions: 1},
+		{Path: "scratch.txt", Base: "base123", Status: Untracked},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ChangesFromMergeBase() = %#v, want %#v", got, want)
+	}
+}
+
+func TestRepositoryDiffUsesChangeBase(t *testing.T) {
+	runner := &fakeRunner{outputs: map[string]string{
+		"git rev-parse --show-toplevel":                                            ".",
+		"git diff --no-ext-diff --find-renames --color=never base123 -- README.md": "diff --git a/README.md b/README.md\n",
+	}}
+	repo := Repository{Runner: runner}
+
+	_, err := repo.Diff(context.Background(), FileChange{Path: "README.md", Base: "base123", Status: Modified})
+	if err != nil {
+		t.Fatalf("Diff() error = %v", err)
+	}
+	want := "git diff --no-ext-diff --find-renames --color=never base123 -- README.md"
+	if len(runner.calls) != 2 || runner.calls[1] != want {
+		t.Fatalf("Diff() command = %#v, want %q", runner.calls, want)
+	}
+}
+
 func TestRepositoryChangesWrapsStatusError(t *testing.T) {
 	runner := &fakeRunner{
 		errs: map[string]error{"git rev-parse --show-toplevel": errors.New("not a repo")},

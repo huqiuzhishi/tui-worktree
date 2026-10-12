@@ -20,6 +20,9 @@ func OpenEditorCommand(editor, worktreeDir, filePath string, line int) *exec.Cmd
 	if worktreeDir == "" {
 		worktreeDir = "."
 	}
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(worktreeDir, filePath)
+	}
 	cmd := exec.Command("sh", "-c", editorLaunchScript(editor, line), "editor", filePath)
 	cmd.Dir = worktreeDir
 	cmd.Env = append(os.Environ(), "EDITOR="+editor, fmt.Sprintf("LINE=%d", line))

@@ -12,6 +12,10 @@ type Repository interface {
 	Diff(context.Context, gitview.FileChange) (string, error)
 }
 
+type MergeBaseRepository interface {
+	ChangesFromMergeBase(context.Context) ([]gitview.FileChange, error)
+}
+
 type WorktreeRepository interface {
 	Worktrees(context.Context) ([]gitview.Worktree, error)
 }
@@ -22,6 +26,17 @@ type RootRepository interface {
 
 type DeleteWorktreeRepository interface {
 	DeleteWorktree(context.Context, gitview.Worktree) error
+}
+
+func loadChanges(ctx context.Context, repo Repository, mergeBase bool) ([]gitview.FileChange, error) {
+	if !mergeBase {
+		return repo.Changes(ctx)
+	}
+	mergeBaseRepo, ok := repo.(MergeBaseRepository)
+	if !ok {
+		return nil, fmt.Errorf("merge-base diff is not supported")
+	}
+	return mergeBaseRepo.ChangesFromMergeBase(ctx)
 }
 
 func loadWorktrees(ctx context.Context, repo Repository) ([]gitview.Worktree, error) {

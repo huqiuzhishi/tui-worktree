@@ -239,7 +239,7 @@ func TestReloadSnapshotDoesNotLoadDiff(t *testing.T) {
 		},
 	}
 
-	snapshot := loadSnapshot(context.Background(), repo, "", false)
+	snapshot := loadSnapshot(context.Background(), repo, "", false, false)
 
 	if len(repo.calls) != 0 {
 		t.Fatalf("Diff calls = %#v, want none for reload snapshot", repo.calls)

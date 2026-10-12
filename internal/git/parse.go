@@ -62,6 +62,30 @@ func parsePorcelainStatusZ(output string) ([]FileChange, error) {
 	return changes, nil
 }
 
+func ParseNameStatus(output string) ([]FileChange, error) {
+	records := splitNUL(output)
+	changes := make([]FileChange, 0, len(records)/2)
+	for i := 0; i < len(records); {
+		code := records[i]
+		i++
+		if i >= len(records) {
+			return nil, fmt.Errorf("parse name-status code %q: missing path", code)
+		}
+		change := FileChange{Path: records[i], Status: statusFromCode(code)}
+		i++
+		if change.Status == Renamed {
+			if i >= len(records) {
+				return nil, fmt.Errorf("parse name-status rename %q: missing new path", change.Path)
+			}
+			change.OldPath = change.Path
+			change.Path = records[i]
+			i++
+		}
+		changes = append(changes, change)
+	}
+	return changes, nil
+}
+
 func ParseNumstat(output string) (map[string]LineStat, error) {
 	if strings.Contains(output, "\x00") {
 		return parseNumstatZ(output)
