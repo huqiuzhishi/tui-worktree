@@ -64,8 +64,22 @@ func (r Repository) Changes(ctx context.Context) ([]FileChange, error) {
 	return addContentFingerprints(dir, ApplyLineStats(changes, stats)), nil
 }
 
+func (r Repository) ChangesFromDefaultBranch(ctx context.Context) ([]FileChange, error) {
+	dir, err := r.root(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !r.hasHead(ctx, dir) {
+		return r.Changes(ctx)
+	}
+	base, err := r.defaultBranchRef(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	return r.changesFrom(ctx, dir, base)
+}
+
 func (r Repository) ChangesFromMergeBase(ctx context.Context) ([]FileChange, error) {
-	runner := r.runner()
 	dir, err := r.root(ctx)
 	if err != nil {
 		return nil, err
@@ -77,7 +91,11 @@ func (r Repository) ChangesFromMergeBase(ctx context.Context) ([]FileChange, err
 	if err != nil {
 		return nil, err
 	}
+	return r.changesFrom(ctx, dir, base)
+}
 
+func (r Repository) changesFrom(ctx context.Context, dir, base string) ([]FileChange, error) {
+	runner := r.runner()
 	nameStatusOut, err := runner.Run(ctx, dir, "git", "diff", "--name-status", "-z", "--find-renames", base, "--")
 	if err != nil {
 		return nil, fmt.Errorf("git diff --name-status: %w", err)
@@ -296,28 +314,27 @@ func (r Repository) DeleteWorktree(ctx context.Context, worktree Worktree) error
 	return nil
 }
 
-func (r Repository) mergeBase(ctx context.Context, root string) (string, error) {
-	ref := ""
+func (r Repository) defaultBranchRef(ctx context.Context, root string) (string, error) {
 	out, err := r.runner().Run(ctx, root, "git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
 	if err == nil {
-		ref = trimTrailingNewline(out)
-		local := shortRemoteBranch(ref)
-		if _, err := r.runner().Run(ctx, root, "git", "rev-parse", "--verify", local); err == nil {
-			ref = local
+		if ref := trimTrailingNewline(out); ref != "" {
+			return ref, nil
 		}
 	}
-	if ref == "" {
-		for _, candidate := range []string{"main", "master", "trunk"} {
-			if _, err := r.runner().Run(ctx, root, "git", "rev-parse", "--verify", candidate); err == nil {
-				ref = candidate
-				break
-			}
+	for _, candidate := range []string{"origin/main", "origin/master", "origin/trunk", "main", "master", "trunk"} {
+		if _, err := r.runner().Run(ctx, root, "git", "rev-parse", "--verify", candidate); err == nil {
+			return candidate, nil
 		}
 	}
-	if ref == "" {
-		return "", fmt.Errorf("merge base: default branch not found (tried origin/HEAD, main, master, trunk)")
+	return "", fmt.Errorf("default branch not found (tried origin/HEAD, origin/main, origin/master, origin/trunk, main, master, trunk)")
+}
+
+func (r Repository) mergeBase(ctx context.Context, root string) (string, error) {
+	ref, err := r.defaultBranchRef(ctx, root)
+	if err != nil {
+		return "", err
 	}
-	out, err = r.runner().Run(ctx, root, "git", "merge-base", "HEAD", ref)
+	out, err := r.runner().Run(ctx, root, "git", "merge-base", "HEAD", ref)
 	if err != nil {
 		return "", fmt.Errorf("git merge-base HEAD %s: %w", ref, err)
 	}

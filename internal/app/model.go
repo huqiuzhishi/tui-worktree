@@ -20,7 +20,7 @@ func loadModel(ctx context.Context, repo Repository, themeName string, transpare
 		preset, _ = theme.Preset("tokyonight-night")
 	}
 
-	snapshot := loadSnapshot(ctx, repo, "", true, false)
+	snapshot := loadSnapshot(ctx, repo, "", true, tui.DiffBaseMergeBase)
 	if snapshot.Error == nil {
 		snapshot.Error = themeErr
 	}
@@ -40,8 +40,8 @@ func loadModel(ctx context.Context, repo Repository, themeName string, transpare
 		LoadDiff: func(ctx context.Context, worktreePath string, change gitview.FileChange) string {
 			return loadDiff(ctx, repositoryAt(repo, worktreePath), change)
 		},
-		Reload: func(ctx context.Context, selectedWorktreePath string, mergeBase bool) tui.Snapshot {
-			return loadSnapshot(ctx, repo, selectedWorktreePath, false, mergeBase)
+		Reload: func(ctx context.Context, selectedWorktreePath string, base tui.DiffBase) tui.Snapshot {
+			return loadSnapshot(ctx, repo, selectedWorktreePath, false, base)
 		},
 		DeleteWorktree: func(ctx context.Context, worktree gitview.Worktree) error {
 			if deleteRepo, ok := repo.(DeleteWorktreeRepository); ok {
@@ -62,7 +62,7 @@ func loadModel(ctx context.Context, repo Repository, themeName string, transpare
 	})
 }
 
-func loadSnapshot(ctx context.Context, repo Repository, selectedWorktreePath string, includeDiff, mergeBase bool) tui.Snapshot {
+func loadSnapshot(ctx context.Context, repo Repository, selectedWorktreePath string, includeDiff bool, base tui.DiffBase) tui.Snapshot {
 	worktrees, err := loadWorktrees(ctx, repo)
 	if err != nil {
 		return tui.Snapshot{Error: err}
@@ -74,7 +74,7 @@ func loadSnapshot(ctx context.Context, repo Repository, selectedWorktreePath str
 		if worktree.Path == selectedWorktreePath || selectedWorktreePath == "" && worktree.Current {
 			selected = i
 		}
-		changes, err := loadChanges(ctx, repositoryAt(repo, worktree.Path), mergeBase)
+		changes, err := loadChanges(ctx, repositoryAt(repo, worktree.Path), base)
 		states = append(states, tui.WorktreeState{
 			Worktree: worktree,
 			Changes:  changes,

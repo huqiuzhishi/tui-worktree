@@ -28,6 +28,14 @@ func (f *fakeRepo) Changes(context.Context) ([]gitview.FileChange, error) {
 	return f.changes, nil
 }
 
+func (f *fakeRepo) ChangesFromDefaultBranch(ctx context.Context) ([]gitview.FileChange, error) {
+	return f.Changes(ctx)
+}
+
+func (f *fakeRepo) ChangesFromMergeBase(ctx context.Context) ([]gitview.FileChange, error) {
+	return f.Changes(ctx)
+}
+
 func (f *fakeRepo) Diff(_ context.Context, change gitview.FileChange) (string, error) {
 	f.calls = append(f.calls, change.Path)
 	return f.diffs[change.Path], nil
@@ -239,7 +247,7 @@ func TestReloadSnapshotDoesNotLoadDiff(t *testing.T) {
 		},
 	}
 
-	snapshot := loadSnapshot(context.Background(), repo, "", false, false)
+	snapshot := loadSnapshot(context.Background(), repo, "", false, tui.DiffBaseHead)
 
 	if len(repo.calls) != 0 {
 		t.Fatalf("Diff calls = %#v, want none for reload snapshot", repo.calls)

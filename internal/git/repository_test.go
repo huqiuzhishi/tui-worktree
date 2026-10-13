@@ -101,8 +101,7 @@ func TestRepositoryChangesFromMergeBase(t *testing.T) {
 		"git rev-parse --show-toplevel":                             ".",
 		"git rev-parse --verify HEAD":                               "feature-head\n",
 		"git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
-		"git rev-parse --verify main":                               "main-head\n",
-		"git merge-base HEAD main":                                  "base123\n",
+		"git merge-base HEAD origin/main":                           "base123\n",
 		"git diff --name-status -z --find-renames base123 --":       "M\x00README.md\x00R100\x00old.go\x00new.go\x00",
 		"git status --porcelain=v1 -z":                              " M README.md\x00?? scratch.txt\x00",
 		"git diff --numstat -z base123 --":                          "4\t2\tREADME.md\x001\t0\t\x00old.go\x00new.go\x00",
@@ -120,6 +119,27 @@ func TestRepositoryChangesFromMergeBase(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ChangesFromMergeBase() = %#v, want %#v", got, want)
+	}
+}
+
+func TestRepositoryChangesFromDefaultBranch(t *testing.T) {
+	runner := &fakeRunner{outputs: map[string]string{
+		"git rev-parse --show-toplevel":                             ".",
+		"git rev-parse --verify HEAD":                               "feature-head\n",
+		"git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+		"git diff --name-status -z --find-renames origin/main --":   "M\x00README.md\x00",
+		"git status --porcelain=v1 -z":                              "",
+		"git diff --numstat -z origin/main --":                      "2\t1\tREADME.md\x00",
+	}}
+	repo := Repository{Runner: runner}
+
+	got, err := repo.ChangesFromDefaultBranch(context.Background())
+	if err != nil {
+		t.Fatalf("ChangesFromDefaultBranch() error = %v", err)
+	}
+	want := []FileChange{{Path: "README.md", Base: "origin/main", Status: Modified, Additions: 2, Deletions: 1}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ChangesFromDefaultBranch() = %#v, want %#v", got, want)
 	}
 }
 

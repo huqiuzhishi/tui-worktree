@@ -35,7 +35,7 @@ type Config struct {
 	Error             error
 	LoadDiff          func(context.Context, string, gitview.FileChange) string
 	DeleteWorktree    func(context.Context, gitview.Worktree) error
-	Reload            func(context.Context, string, bool) Snapshot
+	Reload            func(context.Context, string, DiffBase) Snapshot
 	SaveTheme         func(string) error
 	SaveTransparent   func(bool) error
 	FindForgeCLI      func() (string, bool)
@@ -46,6 +46,25 @@ type Config struct {
 type PullRequestRequest = command.PullRequestRequest
 
 type MergeRequest = command.MergeRequest
+
+type DiffBase int
+
+const (
+	DiffBaseMergeBase DiffBase = iota
+	DiffBaseRemote
+	DiffBaseHead
+)
+
+func (b DiffBase) Label() string {
+	switch b {
+	case DiffBaseRemote:
+		return "origin"
+	case DiffBaseMergeBase:
+		return "merge-base"
+	default:
+		return "HEAD"
+	}
+}
 
 type Snapshot struct {
 	Worktrees        []WorktreeState
@@ -82,7 +101,7 @@ type Model struct {
 	revision          int
 	refreshGeneration int
 	refreshInFlight   bool
-	mergeBase         bool
+	diffBase          DiffBase
 	width             int
 	height            int
 	err               error
@@ -100,7 +119,7 @@ type Model struct {
 	worktreeList
 	loadDiff          func(context.Context, string, gitview.FileChange) string
 	deleteWorktree    func(context.Context, gitview.Worktree) error
-	reload            func(context.Context, string, bool) Snapshot
+	reload            func(context.Context, string, DiffBase) Snapshot
 	saveTheme         func(string) error
 	saveTransparent   func(bool) error
 	findForgeCLI      func() (string, bool)
@@ -514,12 +533,8 @@ func (m Model) footerText() string {
 	if len(m.overlapTargetsFor(m.selectedFileValue())) > 0 {
 		hints = append(hints, components.FooterHint{Icon: components.IconWarning, Key: "o", Label: "overlaps"})
 	}
-	baseLabel := "HEAD"
-	if m.mergeBase {
-		baseLabel = "merge-base"
-	}
 	hints = append(hints,
-		components.FooterHint{Icon: components.IconFile, Key: "b", Label: baseLabel},
+		components.FooterHint{Icon: components.IconFile, Key: "b", Label: m.diffBaseLabel()},
 		components.FooterHint{Icon: components.IconTheme, Key: "t", Label: "themes"},
 		components.FooterHint{Icon: components.IconQuit, Key: "q", Label: "quit"},
 	)
@@ -578,10 +593,11 @@ func (m *Model) moveSelection(delta int) tea.Cmd {
 
 func (m Model) fileListComponent() components.FileList {
 	return components.FileList{
-		Items:    fileItems(m.changes),
-		Selected: m.selected,
-		ScrollX:  m.fileScrollX,
-		Filter:   m.fileFilter,
+		Items:     fileItems(m.changes),
+		Selected:  m.selected,
+		ScrollX:   m.fileScrollX,
+		Filter:    m.fileFilter,
+		BaseLabel: m.diffBaseLabel(),
 	}
 }
 
@@ -635,15 +651,20 @@ func (m *Model) toggleDiffBase() tea.Cmd {
 	if m.reload == nil {
 		return m.toast.Error("diff reload is not configured")
 	}
-	m.mergeBase = !m.mergeBase
+	m.diffBase = (m.diffBase + 1) % 3
 	m.revision++
 	m.diffs = map[string]string{}
 	m.refreshDiff()
-	label := "HEAD"
-	if m.mergeBase {
-		label = "merge base"
+	return tea.Batch(m.toast.Info("diff base: "+m.diffBaseLabel()), m.startReloadCmd(m.selectedWorktreeValue().Path))
+}
+
+func (m Model) diffBaseLabel() string {
+	if m.diffBase == DiffBaseRemote {
+		if branch := m.defaultBranchName(); branch != "" {
+			return "origin/" + branch
+		}
 	}
-	return tea.Batch(m.toast.Info("diff base: "+label), m.startReloadCmd(m.selectedWorktreeValue().Path))
+	return m.diffBase.Label()
 }
 
 func (m *Model) openSelectedFileInEditor() tea.Cmd {
@@ -1344,7 +1365,7 @@ func (m Model) reloadCmd(generation int, selectedWorktreePath string) tea.Cmd {
 		}
 	}
 	return func() tea.Msg {
-		return reloadMsg{generation: generation, snapshot: reload(m.context, selectedWorktreePath, m.mergeBase)}
+		return reloadMsg{generation: generation, snapshot: reload(m.context, selectedWorktreePath, m.diffBase)}
 	}
 }
 
@@ -1644,6 +1665,7 @@ func (m Model) renderDiff(width, height int) string {
 	if change := m.selectedFileValue(); change.Path != "" {
 		selected = "[3]-" + change.Path
 	}
+	selected += " · " + m.diffBaseLabel()
 	focused := m.focusedPane == paneDiff
 	return m.diff.Render(selected, m.panel, focused, width, height)
 }

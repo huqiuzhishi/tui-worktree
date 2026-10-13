@@ -148,7 +148,7 @@ Common key bindings:
 - `m`: merge the selected worktree branch into a selected target branch
 - `w`: toggle diff wrap
 - `n`: toggle diff line numbers
-- `b`: toggle file changes and diffs between `HEAD` and merge base with the default branch
+- `b`: cycle file changes and diffs through merge base, `origin/main|master`, and `HEAD`
 - `t`: open theme picker
 - `q` / `ctrl+c`: quit
 

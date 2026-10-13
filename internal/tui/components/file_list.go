@@ -23,10 +23,11 @@ type FileItem struct {
 type FileBadgeFunc func(FileItem, color.Color) string
 
 type FileList struct {
-	Items    []FileItem
-	Selected int
-	ScrollX  int
-	Filter   string
+	Items     []FileItem
+	Selected  int
+	ScrollX   int
+	Filter    string
+	BaseLabel string
 }
 
 func (l FileList) SelectedItem() (FileItem, bool) {
@@ -186,12 +187,15 @@ func (l FileList) renderLine(styles theme.Styles, item FileItem, background colo
 }
 
 func (l FileList) title(visibleCount, overlapCount int) string {
-	if l.Filter != "" {
-		return fmt.Sprintf("[2]-%s %d filtered [Esc]", IconFile, visibleCount)
-	}
 	title := fmt.Sprintf("[2]-%s %d files", IconFile, visibleCount)
+	if l.Filter != "" {
+		title = fmt.Sprintf("[2]-%s %d filtered [Esc]", IconFile, visibleCount)
+	}
 	if overlapCount > 0 {
 		title += fmt.Sprintf("  %d overlaps", overlapCount)
+	}
+	if l.BaseLabel != "" {
+		title += " · " + l.BaseLabel
 	}
 	return title
 }

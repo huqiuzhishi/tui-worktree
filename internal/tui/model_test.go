@@ -879,31 +879,37 @@ func TestHorizontalScrollMovesFocusedFileLine(t *testing.T) {
 	}
 }
 
-func TestDiffBaseToggleReloadsAgainstMergeBase(t *testing.T) {
+func TestDiffBaseToggleCyclesHeadMergeBaseAndRemote(t *testing.T) {
 	model := testModel(t)
-	var mergeBase bool
-	model.reload = func(_ context.Context, _ string, useMergeBase bool) Snapshot {
-		mergeBase = useMergeBase
+	var reloadedBase DiffBase
+	model.reload = func(_ context.Context, _ string, base DiffBase) Snapshot {
+		reloadedBase = base
 		return Snapshot{Worktrees: model.worktrees, Changes: model.changes}
 	}
 
-	next, cmd := model.Update(tea.KeyPressMsg(tea.Key{Text: "b", Code: 'b'}))
-	got := next.(Model)
-	if !got.mergeBase {
-		t.Fatal("b should enable merge-base diff mode")
-	}
-	batch, ok := cmd().(tea.BatchMsg)
-	if !ok {
-		t.Fatalf("b command = %#v, want batch", cmd())
-	}
-	for _, child := range batch {
-		_ = child()
-	}
-	if !mergeBase {
-		t.Fatal("reload should receive merge-base mode")
-	}
-	if !strings.Contains(ansi.Strip(got.footerText()), "b merge-base") {
-		t.Fatalf("footer should show merge-base mode: %q", ansi.Strip(got.footerText()))
+	for _, want := range []DiffBase{DiffBaseRemote, DiffBaseHead, DiffBaseMergeBase} {
+		next, cmd := model.Update(tea.KeyPressMsg(tea.Key{Text: "b", Code: 'b'}))
+		model = next.(Model)
+		if model.diffBase != want {
+			t.Fatalf("b diff base = %v, want %v", model.diffBase, want)
+		}
+		batch, ok := cmd().(tea.BatchMsg)
+		if !ok {
+			t.Fatalf("b command = %#v, want batch", cmd())
+		}
+		for _, child := range batch {
+			_ = child()
+		}
+		if reloadedBase != want {
+			t.Fatalf("reload base = %v, want %v", reloadedBase, want)
+		}
+		view := ansi.Strip(model.View().Content)
+		if !strings.Contains(view, "· "+want.Label()) {
+			t.Fatalf("panel title should show %q: %q", want.Label(), view)
+		}
+		if !strings.Contains(ansi.Strip(model.footerText()), "b "+want.Label()) {
+			t.Fatalf("footer should show %q: %q", want.Label(), ansi.Strip(model.footerText()))
+		}
 	}
 }
 
@@ -2673,7 +2679,7 @@ func TestInitSchedulesAutoRefresh(t *testing.T) {
 
 func TestAutoRefreshReloadsChanges(t *testing.T) {
 	model := testModel(t)
-	model.reload = func(context.Context, string, bool) Snapshot {
+	model.reload = func(context.Context, string, DiffBase) Snapshot {
 		return Snapshot{
 			Changes: []gitview.FileChange{{Path: "fresh.go", Status: gitview.Added}},
 			Diffs:   map[string]string{"fresh.go": "diff --git a/fresh.go b/fresh.go\n+fresh"},
@@ -2702,7 +2708,7 @@ func TestAutoRefreshReloadsChanges(t *testing.T) {
 
 func TestAutoRefreshSkipsReloadWhilePreviousReloadIsInFlight(t *testing.T) {
 	model := testModel(t)
-	model.reload = func(context.Context, string, bool) Snapshot {
+	model.reload = func(context.Context, string, DiffBase) Snapshot {
 		return Snapshot{
 			Changes: []gitview.FileChange{{Path: "fresh.go", Status: gitview.Added}},
 			Diffs:   map[string]string{"fresh.go": "diff --git a/fresh.go b/fresh.go\n+fresh"},
@@ -2875,7 +2881,7 @@ func TestAutoRefreshPreservesSelectedFileWhenNewFileIsAdded(t *testing.T) {
 	model.worktrees[model.selectedWorktree].Changes = model.changes
 	model.selected = 1
 	model.refreshDiff()
-	model.reload = func(context.Context, string, bool) Snapshot {
+	model.reload = func(context.Context, string, DiffBase) Snapshot {
 		changes := []gitview.FileChange{
 			{Path: "new.go", Status: gitview.Added},
 			{Path: "a.go", Status: gitview.Modified},
@@ -2971,7 +2977,7 @@ func TestAutoRefreshPreservesSelectedDiffWhenLineStatsAreUnchanged(t *testing.T)
 		loads++
 		return "diff --git a/a.go b/a.go\n+fresh"
 	}
-	model.reload = func(context.Context, string, bool) Snapshot {
+	model.reload = func(context.Context, string, DiffBase) Snapshot {
 		return Snapshot{
 			Worktrees: []WorktreeState{{
 				Worktree: model.selectedWorktreeValue(),
@@ -3016,7 +3022,7 @@ func TestAutoRefreshReloadsSelectedDiffWhenFingerprintChanges(t *testing.T) {
 		return "diff --git a/a.go b/a.go\n+fresh"
 	}
 	freshChanges := []gitview.FileChange{{Path: "a.go", Status: gitview.Modified, Additions: 1, Fingerprint: "fresh"}}
-	model.reload = func(context.Context, string, bool) Snapshot {
+	model.reload = func(context.Context, string, DiffBase) Snapshot {
 		return Snapshot{
 			Worktrees: []WorktreeState{{
 				Worktree: model.selectedWorktreeValue(),
@@ -3060,7 +3066,7 @@ func TestAutoRefreshReloadsSelectedDiffWhenLineStatsChange(t *testing.T) {
 		return "diff --git a/a.go b/a.go\n+fresh"
 	}
 	freshChanges := []gitview.FileChange{{Path: "a.go", Status: gitview.Modified, Additions: 2}}
-	model.reload = func(context.Context, string, bool) Snapshot {
+	model.reload = func(context.Context, string, DiffBase) Snapshot {
 		return Snapshot{
 			Worktrees: []WorktreeState{{
 				Worktree: model.selectedWorktreeValue(),
@@ -3114,7 +3120,7 @@ func TestAutoRefreshPreservesDiffScrollForSelectedFile(t *testing.T) {
 	model.diffs = map[string]string{"a.go": diff}
 	model.refreshDiff()
 	model.diff.SetYOffset(5)
-	model.reload = func(context.Context, string, bool) Snapshot {
+	model.reload = func(context.Context, string, DiffBase) Snapshot {
 		return Snapshot{
 			Changes: []gitview.FileChange{{Path: "a.go", Status: gitview.Modified}},
 			Diffs:   map[string]string{"a.go": diff + "\n line-11"},
@@ -3162,7 +3168,7 @@ func TestAutoRefreshPreservesDiffScrollWhenSelectedDiffReloadsLazily(t *testing.
 	model.selected = 1
 	model.refreshDiff()
 	model.diff.SetYOffset(5)
-	model.reload = func(context.Context, string, bool) Snapshot {
+	model.reload = func(context.Context, string, DiffBase) Snapshot {
 		return Snapshot{
 			Changes: model.changes,
 			Diffs:   map[string]string{"a.go": "diff --git a/a.go b/a.go\n+a"},
@@ -3200,7 +3206,7 @@ func TestAutoRefreshUsesConfiguredContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	model.context = ctx
-	model.reload = func(ctx context.Context, _ string, _ bool) Snapshot {
+	model.reload = func(ctx context.Context, _ string, _ DiffBase) Snapshot {
 		if ctx.Err() == nil {
 			t.Fatal("reload context was not canceled")
 		}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	gitview "github.com/overthinker1127/tui-worktree/internal/git"
+	"github.com/overthinker1127/tui-worktree/internal/tui"
 )
 
 type Repository interface {
@@ -12,7 +13,8 @@ type Repository interface {
 	Diff(context.Context, gitview.FileChange) (string, error)
 }
 
-type MergeBaseRepository interface {
+type DiffBaseRepository interface {
+	ChangesFromDefaultBranch(context.Context) ([]gitview.FileChange, error)
 	ChangesFromMergeBase(context.Context) ([]gitview.FileChange, error)
 }
 
@@ -28,15 +30,18 @@ type DeleteWorktreeRepository interface {
 	DeleteWorktree(context.Context, gitview.Worktree) error
 }
 
-func loadChanges(ctx context.Context, repo Repository, mergeBase bool) ([]gitview.FileChange, error) {
-	if !mergeBase {
+func loadChanges(ctx context.Context, repo Repository, base tui.DiffBase) ([]gitview.FileChange, error) {
+	if base == tui.DiffBaseHead {
 		return repo.Changes(ctx)
 	}
-	mergeBaseRepo, ok := repo.(MergeBaseRepository)
+	diffBaseRepo, ok := repo.(DiffBaseRepository)
 	if !ok {
-		return nil, fmt.Errorf("merge-base diff is not supported")
+		return nil, fmt.Errorf("alternate diff bases are not supported")
 	}
-	return mergeBaseRepo.ChangesFromMergeBase(ctx)
+	if base == tui.DiffBaseRemote {
+		return diffBaseRepo.ChangesFromDefaultBranch(ctx)
+	}
+	return diffBaseRepo.ChangesFromMergeBase(ctx)
 }
 
 func loadWorktrees(ctx context.Context, repo Repository) ([]gitview.Worktree, error) {
