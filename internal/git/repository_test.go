@@ -80,9 +80,9 @@ func TestRepositoryDiffReturnsUntrackedFileContents(t *testing.T) {
 
 func TestRepositoryDiffRequestsUncoloredOutput(t *testing.T) {
 	runner := &fakeRunner{outputs: map[string]string{
-		"git rev-parse --show-toplevel":                                         ".",
-		"git rev-parse --verify HEAD":                                           "abc123\n",
-		"git diff --no-ext-diff --find-renames --color=never HEAD -- README.md": "diff --git a/README.md b/README.md\n",
+		"git rev-parse --show-toplevel": ".",
+		"git rev-parse --verify HEAD":   "abc123\n",
+		"git diff --no-ext-diff --find-renames --color=never --unified=999999 HEAD -- README.md": "diff --git a/README.md b/README.md\n",
 	}}
 	repo := Repository{Runner: runner}
 
@@ -90,7 +90,7 @@ func TestRepositoryDiffRequestsUncoloredOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Diff() error = %v", err)
 	}
-	want := "git diff --no-ext-diff --find-renames --color=never HEAD -- README.md"
+	want := "git diff --no-ext-diff --find-renames --color=never --unified=999999 HEAD -- README.md"
 	if len(runner.calls) != 3 || runner.calls[2] != want {
 		t.Fatalf("Diff() command = %#v, want %q", runner.calls, want)
 	}
@@ -145,8 +145,8 @@ func TestRepositoryChangesFromDefaultBranch(t *testing.T) {
 
 func TestRepositoryDiffUsesChangeBase(t *testing.T) {
 	runner := &fakeRunner{outputs: map[string]string{
-		"git rev-parse --show-toplevel":                                            ".",
-		"git diff --no-ext-diff --find-renames --color=never base123 -- README.md": "diff --git a/README.md b/README.md\n",
+		"git rev-parse --show-toplevel": ".",
+		"git diff --no-ext-diff --find-renames --color=never --unified=999999 base123 -- README.md": "diff --git a/README.md b/README.md\n",
 	}}
 	repo := Repository{Runner: runner}
 
@@ -154,7 +154,7 @@ func TestRepositoryDiffUsesChangeBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Diff() error = %v", err)
 	}
-	want := "git diff --no-ext-diff --find-renames --color=never base123 -- README.md"
+	want := "git diff --no-ext-diff --find-renames --color=never --unified=999999 base123 -- README.md"
 	if len(runner.calls) != 2 || runner.calls[1] != want {
 		t.Fatalf("Diff() command = %#v, want %q", runner.calls, want)
 	}

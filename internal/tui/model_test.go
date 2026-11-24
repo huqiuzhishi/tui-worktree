@@ -934,6 +934,31 @@ func TestDiffWrapToggleDisablesSoftWrap(t *testing.T) {
 	}
 }
 
+func TestDiffContextFoldingToggleUsesF(t *testing.T) {
+	model := testModel(t)
+	model.setDiffContent("@@ -1,3 +1,3 @@\n unchanged\n-old\n+new")
+
+	next, _ := model.Update(tea.KeyPressMsg(tea.Key{Text: "f", Code: 'f'}))
+	got := next.(Model)
+
+	if !got.diff.ContextFolded() {
+		t.Fatal("f should fold unchanged diff context")
+	}
+	if got.toast.Message != "diff context folded" || got.toast.Kind != components.ToastInfo {
+		t.Fatalf("toast = %#v, want info diff context folded", got.toast)
+	}
+	view := ansi.Strip(got.diff.RenderContent())
+	if !strings.Contains(view, "⋯ 1 unchanged line") || strings.Contains(view, "│  unchanged") {
+		t.Fatalf("folded diff = %q", view)
+	}
+
+	next, _ = got.Update(tea.KeyPressMsg(tea.Key{Text: "f", Code: 'f'}))
+	got = next.(Model)
+	if got.diff.ContextFolded() || !strings.Contains(ansi.Strip(got.diff.RenderContent()), " unchanged") {
+		t.Fatalf("second f should unfold diff context: %q", ansi.Strip(got.diff.RenderContent()))
+	}
+}
+
 func TestToastHelpersSetTypedVariants(t *testing.T) {
 	model := testModel(t)
 

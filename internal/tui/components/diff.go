@@ -18,6 +18,7 @@ type Diff struct {
 	contentKey      string
 	styles          theme.Styles
 	showLineNumbers bool
+	foldContext     bool
 }
 
 func NewDiff(styles theme.Styles) Diff {
@@ -50,8 +51,8 @@ func (d *Diff) SetContent(key, diff string) bool {
 	d.contentKey = key
 	d.content = diff
 	d.lines = strings.Split(diff, "\n")
+	d.refreshViewportContent()
 	d.refreshViewportStyles()
-	d.viewport.SetContent(diff)
 	return true
 }
 
@@ -74,6 +75,17 @@ func (d *Diff) ToggleLineNumbers() bool {
 	d.showLineNumbers = !d.showLineNumbers
 	d.SetXOffset(clampDiff(d.XOffset(), 0, d.MaxXOffset()))
 	return d.showLineNumbers
+}
+
+func (d *Diff) ToggleContextFolding() bool {
+	d.foldContext = !d.foldContext
+	d.refreshViewportContent()
+	d.refreshViewportStyles()
+	return d.foldContext
+}
+
+func (d Diff) ContextFolded() bool {
+	return d.foldContext
 }
 
 func (d Diff) SoftWrap() bool {
@@ -130,7 +142,7 @@ func (d Diff) DisplayLineCount(diff string, width int) int {
 	if diff == "" {
 		return 1
 	}
-	numbered := numberedDiffLines(strings.Split(diff, "\n"))
+	numbered := d.displayedNumberedLines(strings.Split(diff, "\n"))
 	if !d.viewport.SoftWrap {
 		return len(numbered)
 	}
@@ -144,29 +156,38 @@ func (d Diff) DisplayLineCount(diff string, width int) int {
 
 func (d Diff) MaxTextLineWidth(diff string) int {
 	width := 0
-	for _, line := range strings.Split(diff, "\n") {
-		width = max(width, lipgloss.Width(line))
+	for _, line := range d.displayedNumberedLines(strings.Split(diff, "\n")) {
+		width = max(width, lipgloss.Width(line.text))
 	}
 	return width
 }
 
 func (d Diff) maxLineWidth() int {
 	width := 0
-	for _, line := range d.lines {
-		width = max(width, lipgloss.Width(line))
+	for _, line := range d.numberedLines() {
+		width = max(width, lipgloss.Width(line.text))
 	}
 	return width
 }
 
+func (d *Diff) refreshViewportContent() {
+	lines := d.numberedLines()
+	text := make([]string, len(lines))
+	for i, line := range lines {
+		text[i] = line.text
+	}
+	d.viewport.SetContent(strings.Join(text, "\n"))
+}
+
 func (d *Diff) refreshViewportStyles() {
 	d.viewport.Style = d.styles.Diff
-	lines := d.lines
+	lines := d.numberedLines()
 	d.viewport.StyleLineFunc = func(index int) lipgloss.Style {
 		width := d.viewport.Width()
 		if index < 0 || index >= len(lines) {
 			return d.styles.Diff.Inline(true).Width(width)
 		}
-		return d.lineStyle(lines[index]).Inline(true).Width(width)
+		return d.lineStyle(lines[index].text).Inline(true).Width(width)
 	}
 }
 
@@ -221,7 +242,7 @@ func (d Diff) RenderTextAt(diff string, width, height, yOffset, xOffset int) str
 	width = max(1, width)
 	height = max(1, height)
 	textWidth := d.TextWidth(width)
-	numbered := numberedDiffLines(strings.Split(diff, "\n"))
+	numbered := d.displayedNumberedLines(strings.Split(diff, "\n"))
 	if d.viewport.SoftWrap {
 		return d.renderWrappedLines(numbered, width, textWidth, height, yOffset)
 	}

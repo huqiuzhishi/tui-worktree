@@ -66,6 +66,44 @@ func TestDiffLineNumbersRenderAndToggle(t *testing.T) {
 	}
 }
 
+func TestDiffContextFoldingCollapsesUnchangedRuns(t *testing.T) {
+	diff := testDiff(t, 80, 12)
+	diff.SetContent("fold", strings.Join([]string{
+		"diff --git a/a.go b/a.go",
+		"@@ -1,5 +1,5 @@",
+		" first",
+		" second",
+		"-old",
+		"+new",
+		" last",
+	}, "\n"))
+
+	if !diff.ToggleContextFolding() {
+		t.Fatal("first folding toggle should fold context")
+	}
+	view := ansi.Strip(diff.RenderContent())
+	for _, want := range []string{"⋯ 2 unchanged lines", "-old", "+new", "⋯ 1 unchanged line"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("folded diff missing %q in %q", want, view)
+		}
+	}
+	for _, hidden := range []string{" first", " second", " last"} {
+		if strings.Contains(view, hidden) {
+			t.Fatalf("folded diff should hide %q in %q", hidden, view)
+		}
+	}
+
+	if diff.ToggleContextFolding() {
+		t.Fatal("second folding toggle should unfold context")
+	}
+	view = ansi.Strip(diff.RenderContent())
+	for _, want := range []string{" first", " second", " last"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("unfolded diff missing %q in %q", want, view)
+		}
+	}
+}
+
 func TestDiffWrappedContinuationKeepsBlankGutter(t *testing.T) {
 	diff := testDiff(t, 24, 6)
 	diff.SetContent("wrap", "@@ -1,1 +1,1 @@\n+"+strings.Repeat("x", diff.TextWidth(diff.Width()))+"tail")

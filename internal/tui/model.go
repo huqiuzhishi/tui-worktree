@@ -359,6 +359,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "t":
 		m.openThemePicker()
+	case "f":
+		return m, m.toggleDiffContextFolding()
 	case "w":
 		return m, m.toggleDiffWrap()
 	case "n":
@@ -519,6 +521,7 @@ func (m Model) footerText() string {
 		hints = append(hints,
 			components.FooterHint{Icon: components.IconFile, Key: "hjkl", Label: "scroll"},
 			components.FooterHint{Icon: components.IconEdit, Key: "e", Label: "edit"},
+			components.FooterHint{Icon: components.IconFile, Key: "f", Label: "fold"},
 			components.FooterHint{Icon: components.IconWrap, Key: "w", Label: "wrap"},
 			components.FooterHint{Icon: components.IconNumbers, Key: "n", Label: "nums"},
 		)
@@ -631,6 +634,13 @@ func (m *Model) focusPreviousPane() {
 	case paneFiles:
 		m.focusedPane = paneWorktrees
 	}
+}
+
+func (m *Model) toggleDiffContextFolding() tea.Cmd {
+	if m.diff.ToggleContextFolding() {
+		return m.toast.Info("diff context folded")
+	}
+	return m.toast.Info("diff context unfolded")
 }
 
 func (m *Model) toggleDiffWrap() tea.Cmd {

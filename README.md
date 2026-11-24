@@ -146,6 +146,7 @@ Common key bindings:
 - `p`: create a PR/MR with `gh` or `glab`
 - `d`: delete selected worktree and branch after confirmation
 - `m`: merge the selected worktree branch into a selected target branch
+- `f`: fold or unfold unchanged diff context
 - `w`: toggle diff wrap
 - `n`: toggle diff line numbers
 - `b`: cycle file changes and diffs through merge base, `origin/main|master`, and `HEAD`

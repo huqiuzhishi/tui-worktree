@@ -139,7 +139,7 @@ func (r Repository) Diff(ctx context.Context, change FileChange) (string, error)
 	if change.Status == Untracked {
 		return untrackedDiff(dir, change.Path)
 	}
-	args := []string{"diff", "--no-ext-diff", "--find-renames", "--color=never"}
+	args := []string{"diff", "--no-ext-diff", "--find-renames", "--color=never", "--unified=999999"}
 	if change.Base != "" {
 		args = append(args, change.Base)
 	} else if r.hasHead(ctx, dir) {

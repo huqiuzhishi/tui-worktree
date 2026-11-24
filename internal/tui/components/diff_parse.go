@@ -13,7 +13,44 @@ type numberedDiffLine struct {
 }
 
 func (d Diff) numberedLines() []numberedDiffLine {
-	return numberedDiffLines(d.lines)
+	return d.displayedNumberedLines(d.lines)
+}
+
+func (d Diff) displayedNumberedLines(lines []string) []numberedDiffLine {
+	numbered := numberedDiffLines(lines)
+	if !d.foldContext {
+		return numbered
+	}
+	return foldDiffContext(numbered)
+}
+
+func foldDiffContext(lines []numberedDiffLine) []numberedDiffLine {
+	folded := make([]numberedDiffLine, 0, len(lines))
+	for i := 0; i < len(lines); {
+		if !isDiffContextLine(lines[i]) {
+			folded = append(folded, lines[i])
+			i++
+			continue
+		}
+		start := i
+		for i < len(lines) && isDiffContextLine(lines[i]) {
+			i++
+		}
+		count := i - start
+		label := "line"
+		if count != 1 {
+			label = "lines"
+		}
+		folded = append(folded, numberedDiffLine{
+			text: fmt.Sprintf("⋯ %d unchanged %s", count, label),
+			path: lines[start].path,
+		})
+	}
+	return folded
+}
+
+func isDiffContextLine(line numberedDiffLine) bool {
+	return line.old > 0 && line.new > 0 && strings.HasPrefix(line.text, " ")
 }
 
 func numberedDiffLines(diffLines []string) []numberedDiffLine {

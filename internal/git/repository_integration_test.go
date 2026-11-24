@@ -147,6 +147,35 @@ func TestRepositoryHandlesSpacesAndPureRename(t *testing.T) {
 	}
 }
 
+func TestRepositoryDiffIncludesEntireFileContext(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test User")
+
+	path := filepath.Join(dir, "full.txt")
+	original := "first\n" + strings.Repeat("before\n", 20) + "old\n" + strings.Repeat("after\n", 20) + "last\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatalf("write full file: %v", err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "init")
+	if err := os.WriteFile(path, []byte(strings.Replace(original, "old\n", "new\n", 1)), 0o644); err != nil {
+		t.Fatalf("modify full file: %v", err)
+	}
+
+	repo := Repository{Dir: dir}
+	diff, err := repo.Diff(context.Background(), FileChange{Path: "full.txt", Status: Modified})
+	if err != nil {
+		t.Fatalf("Diff() error = %v", err)
+	}
+	for _, want := range []string{" first", " last", "-old", "+new"} {
+		if !strings.Contains(diff, want) {
+			t.Fatalf("Diff() missing %q in full-context diff", want)
+		}
+	}
+}
+
 func TestRepositoryDiffWorksFromSubdirectory(t *testing.T) {
 	dir := t.TempDir()
 	runGit(t, dir, "init", "-b", "main")
