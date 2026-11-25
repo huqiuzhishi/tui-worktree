@@ -7,6 +7,16 @@ import (
 	"testing"
 )
 
+func TestPresetUsesDraculaByDefault(t *testing.T) {
+	got, err := Preset("")
+	if err != nil {
+		t.Fatalf("Preset(\"\") error = %v", err)
+	}
+	if got.Name != "dracula" {
+		t.Fatalf("Preset(\"\").Name = %q, want dracula", got.Name)
+	}
+}
+
 func TestPresetReturnsBuiltInThemes(t *testing.T) {
 	for _, name := range []string{
 		"tokyonight-night",

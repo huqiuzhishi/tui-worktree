@@ -169,11 +169,11 @@ func TestUsageMentionsThemes(t *testing.T) {
 	}
 }
 
-func TestResolveThemeUsesFullDefaultThemeName(t *testing.T) {
+func TestResolveThemeUsesDraculaByDefault(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	if got := ResolveTheme(Options{}); got != "tokyonight-night" {
-		t.Fatalf("ResolveTheme(default) = %q, want tokyonight-night", got)
+	if got := ResolveTheme(Options{}); got != "dracula" {
+		t.Fatalf("ResolveTheme(default) = %q, want dracula", got)
 	}
 }
 

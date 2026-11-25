@@ -26,7 +26,7 @@ type Theme struct {
 
 func Preset(name string) (Theme, error) {
 	if name == "" {
-		name = "tokyonight-night"
+		name = "dracula"
 	}
 	if theme, ok := presets[name]; ok {
 		return theme, nil
